@@ -4,9 +4,11 @@ WITH
 
 cleaned_date AS
 (
-	SELECT CAST(GAME_DATE_EST AS date) AS Game_Date_EST --Converting game dates to DATE data type
 
-			--Selecting only necessary columns for data analysis
+--a) Standardizing game dates data type
+	SELECT CAST(GAME_DATE_EST AS date) AS Game_Date_EST
+
+--b) Selecting necessary columns from games.csv
 			,GAME_ID
 			,HOME_TEAM_ID
 			,VISITOR_TEAM_ID
@@ -24,7 +26,7 @@ cleaned_date AS
 			,AST_away
 			,REB_away
 
-			--Classifying games whether they occurred during regular season, play-in tournament or postseason
+--c) Classifying games whether they occurred during the regular season, play-in tournament, or postseason
 			,CASE WHEN GAME_DATE_EST BETWEEN '2003-10-28' AND '2004-04-14' THEN 'Regular Season' --2004 Regular Season
 					WHEN GAME_DATE_EST BETWEEN '2004-04-17' AND '2004-06-15' THEN 'Postseason' --2004 Postseason
 
@@ -88,11 +90,140 @@ cleaned_date AS
 					ELSE NULL END AS GAME_TYPE
 	FROM dbo.games
 
-	--Selecting only the games between 28 Oct 2003 until 22 Dec 2022
+--d) Filtering the games only between 28 Oct 2003 until 22 Dec 2022
 	WHERE GAME_DATE_EST BETWEEN '2003-10-28' AND '2022-06-16'
 ),
 
---Identifying the home team in every game
+--e) Checking duplicates
+check_duplicates AS
+(
+	SELECT *
+			,ROW_NUMBER() OVER (
+				PARTITION BY Game_Date_EST
+							,GAME_ID
+							,HOME_TEAM_ID
+							,VISITOR_TEAM_ID
+							,SEASON
+							,FG_PCT_home
+							,FT_PCT_home
+							,FG3_PCT_home
+							,AST_home
+							,REB_home
+							,FG_PCT_away
+							,FT_PCT_away
+							,FG3_PCT_away
+							,AST_away
+							,REB_away
+							,GAME_TYPE
+				ORDER BY Game_Date_EST) duplicate_num
+	FROM cleaned_date
+),
+
+--f) Checking value ranges of the columns--
+
+--Checking the number of distinct HOME_TEAM_ID
+check_HOME_TEAM_ID AS
+(
+	SELECT COUNT(DISTINCT HOME_TEAM_ID) count_HOME_TEAM_ID
+	FROM cleaned_date
+),
+
+--Checking the number of distinct VISITOR_TEAM_ID
+check_VISITOR_TEAM_ID AS
+(
+	SELECT COUNT(DISTINCT VISITOR_TEAM_ID) count_VISITOR_TEAM_ID
+	FROM cleaned_date
+),
+
+--Checking SEASON range
+check_SEASON AS
+(
+	SELECT SEASON
+	FROM cleaned_date
+	WHERE SEASON NOT BETWEEN '2004' AND '2022'
+),
+
+--Checking FG_PCT_HOME range
+check_FG_PCT_HOME AS
+(
+	SELECT FG_PCT_HOME
+	FROM cleaned_date
+	WHERE FG_PCT_HOME <0 OR FG_PCT_HOME > 100
+),
+
+--Checking FG_PCT_HOME range
+check_FT_PCT_HOME AS
+(
+	SELECT FT_PCT_HOME
+	FROM cleaned_date
+	WHERE FT_PCT_HOME <0 OR FT_PCT_HOME > 100
+),
+
+--Checking FG3_PCT_HOME range
+check_FG3_PCT_HOME AS
+(
+	SELECT FG3_PCT_HOME
+	FROM cleaned_date
+	WHERE FG3_PCT_HOME <0 OR FG3_PCT_HOME > 100
+),
+
+--Checking FG_PCT_HOME range
+check_FG_PCT_AWAY AS
+(
+	SELECT FG_PCT_AWAY
+	FROM cleaned_date
+	WHERE FG_PCT_AWAY <0 OR FG_PCT_AWAY > 100
+),
+
+--Checking FG_PCT_HOME range
+check_FT_PCT_AWAY AS
+(
+	SELECT FT_PCT_AWAY
+	FROM cleaned_date
+	WHERE FT_PCT_AWAY <0 OR FT_PCT_AWAY > 100
+),
+
+--Checking FG3_PCT_HOME range
+check_FG3_PCT_AWAY AS
+(
+	SELECT FG3_PCT_AWAY
+	FROM cleaned_date
+	WHERE FG3_PCT_AWAY <0 OR FG3_PCT_AWAY > 100
+),
+
+--Checking AST_HOME range
+check_AST_HOME AS
+(
+	SELECT AST_HOME
+	FROM cleaned_date
+	WHERE AST_HOME < 0
+),
+
+--Checking AST_AWAY range
+check_AST_AWAY AS
+(
+	SELECT AST_AWAY
+	FROM cleaned_date
+	WHERE AST_AWAY < 0
+),
+
+--Checking REB_HOME range
+check_REB_HOME AS
+(
+	SELECT REB_HOME
+	FROM cleaned_date
+	WHERE REB_HOME < 0
+),
+
+--Checking REB_AWAY range
+check_REB_AWAY AS
+(
+	SELECT REB_AWAY
+	FROM cleaned_date
+	WHERE REB_AWAY < 0
+),
+
+--Identifying the home teams in every game
 teams_HOME AS
 (
 	SELECT c.*
@@ -104,7 +235,7 @@ teams_HOME AS
 	ON c.HOME_TEAM_ID = t.TEAM_ID
 ),
 
---Identifying the visitor team in every game
+--Identifying the visitor teams in every game
 teams_AWAY AS
 (
 	SELECT h.*
@@ -171,7 +302,6 @@ SELECT *
 				ORDER BY Combination DESC
 		) avg_fg_pct_RANK
 FROM average_fg_pct_COMBINE
---ORDER BY SEASON,Combination DESC
 ),
 
 champ_avg_fg_pct AS
@@ -198,7 +328,6 @@ SELECT *
 			WHEN SEASON = '2022' AND Team = 'Warriors' THEN 'champion'
 			ELSE 'not champion' END AS championship_status
 FROM rank_avg_fg_pct
---ORDER BY SEASON,Combination DESC
 ),
 
 -------------------------------------------------------------------------------------------------
@@ -253,7 +382,6 @@ SELECT *
 				ORDER BY Combination DESC
 		) avg_fg_pct_RANK
 FROM average_ft_pct_COMBINE
---ORDER BY SEASON,Combination DESC
 ),
 
 champ_avg_ft_pct AS
@@ -280,7 +408,6 @@ SELECT *
 			WHEN SEASON = '2022' AND Team = 'Warriors' THEN 'champion'
 			ELSE 'not champion' END AS championship_status
 FROM rank_avg_ft_pct
---ORDER BY SEASON,Combination DESC
 ),
 
 -------------------------------------------------------------------------------------------------
@@ -327,6 +454,42 @@ average_fg3_pct_COMBINE AS
 	ON h.Team = a.Team
 ),
 
+rank_avg_fg3_pct AS
+(
+SELECT *
+		,RANK() OVER (
+				PARTITION BY SEASON
+				ORDER BY Combination DESC
+		) avg_fg3_pct_RANK
+FROM average_fg3_pct_COMBINE
+),
+
+champ_avg_fg3_pct AS
+(
+SELECT *
+	,CASE WHEN SEASON = '2004' AND Team = 'Pistons' THEN 'champion'
+			WHEN SEASON = '2005' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2006' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2007' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2008' AND Team = 'Celtics' THEN 'champion'
+			WHEN SEASON = '2009' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2010' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2011' AND Team = 'Mavericks' THEN 'champion'
+			WHEN SEASON = '2012' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2013' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2014' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2015' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2016' AND Team = 'Cavaliers' THEN 'champion'
+			WHEN SEASON = '2017' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2018' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2019' AND Team = 'Raptors' THEN 'champion'
+			WHEN SEASON = '2020' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2021' AND Team = 'Bucks' THEN 'champion'
+			WHEN SEASON = '2022' AND Team = 'Warriors' THEN 'champion'
+			ELSE 'not champion' END AS championship_status
+FROM rank_avg_fg3_pct
+),
+
 -------------------------------------------------------------------------------------------------
 --Average assists
 
@@ -368,6 +531,42 @@ average_ast_COMBINE AS
 	FROM average_ast_HOME h
 	FULL JOIN average_ast_AWAY a
 	ON h.Team = a.Team
+),
+
+rank_avg_ast AS
+(
+SELECT *
+		,RANK() OVER (
+				PARTITION BY SEASON
+				ORDER BY Combination DESC
+		) avg_ast_RANK
+FROM average_ast_COMBINE
+),
+
+champ_avg_ast AS
+(
+SELECT *
+	,CASE WHEN SEASON = '2004' AND Team = 'Pistons' THEN 'champion'
+			WHEN SEASON = '2005' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2006' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2007' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2008' AND Team = 'Celtics' THEN 'champion'
+			WHEN SEASON = '2009' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2010' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2011' AND Team = 'Mavericks' THEN 'champion'
+			WHEN SEASON = '2012' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2013' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2014' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2015' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2016' AND Team = 'Cavaliers' THEN 'champion'
+			WHEN SEASON = '2017' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2018' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2019' AND Team = 'Raptors' THEN 'champion'
+			WHEN SEASON = '2020' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2021' AND Team = 'Bucks' THEN 'champion'
+			WHEN SEASON = '2022' AND Team = 'Warriors' THEN 'champion'
+			ELSE 'not champion' END AS championship_status
+FROM rank_avg_ast
 ),
 
 -------------------------------------------------------------------------------------------------
@@ -412,8 +611,45 @@ average_reb_COMBINE AS
 	FROM average_reb_HOME h
 	FULL JOIN average_reb_AWAY a
 	ON h.Team = a.Team
+),
+
+rank_avg_reb AS
+(
+SELECT *
+		,RANK() OVER (
+				PARTITION BY SEASON
+				ORDER BY Combination DESC
+		) avg_reb_RANK
+FROM average_reb_COMBINE
+),
+
+champ_avg_reb AS
+(
+SELECT *
+	,CASE WHEN SEASON = '2004' AND Team = 'Pistons' THEN 'champion'
+			WHEN SEASON = '2005' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2006' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2007' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2008' AND Team = 'Celtics' THEN 'champion'
+			WHEN SEASON = '2009' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2010' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2011' AND Team = 'Mavericks' THEN 'champion'
+			WHEN SEASON = '2012' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2013' AND Team = 'Heat' THEN 'champion'
+			WHEN SEASON = '2014' AND Team = 'Spurs' THEN 'champion'
+			WHEN SEASON = '2015' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2016' AND Team = 'Cavaliers' THEN 'champion'
+			WHEN SEASON = '2017' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2018' AND Team = 'Warriors' THEN 'champion'
+			WHEN SEASON = '2019' AND Team = 'Raptors' THEN 'champion'
+			WHEN SEASON = '2020' AND Team = 'Lakers' THEN 'champion'
+			WHEN SEASON = '2021' AND Team = 'Bucks' THEN 'champion'
+			WHEN SEASON = '2022' AND Team = 'Warriors' THEN 'champion'
+			ELSE 'not champion' END AS championship_status
+FROM rank_avg_reb
 )
 
 SELECT *
-FROM average_reb_COMBINE
-ORDER BY SEASON,Combination DESC
+FROM champ_avg_reb
+WHERE championship_status = 'champion'
+ORDER BY SEASON
